@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Anti-partiet Partiet — Lägg till en mening</title>
+  <style>
+    body{font-family: Inter, system-ui, -apple-system, "Helvetica Neue", Arial; background:#fff; color:#111; padding:18px; max-width:760px; margin:0 auto;}
+    h1{font-size:20px; margin:0 0 6px 0;}
+    p.lead{color:#444; margin:0 0 18px 0;}
+    .box{border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:12px;}
+    label{display:block; margin-bottom:6px; font-weight:600;}
+    textarea{width:100%; min-height:72px; padding:8px; font-size:15px; border-radius:6px; border:1px solid #ccc; resize:vertical;}
+    button{background:#111; color:#fff; border:none; padding:10px 14px; border-radius:6px; cursor:pointer; font-weight:700;}
+    .list{margin-top:18px;}
+    .item{padding:10px 12px; border-bottom:1px dashed #eee;}
+    .meta{font-size:12px; color:#777;}
+    .hint{font-size:13px; color:#666;}
+    .small{font-size:13px; color:#666; margin-top:6px;}
+    .notice{background:#fff8e6; border:1px solid #ffe6a8; padding:10px; border-radius:6px; margin-bottom:12px;}
+  </style>
+</head>
+<body>
+  <h1>Anti-partiet Partiet</h1>
+  <p class="lead">Det finns inte riktigt något mer att säga i nuläget. Kanske kan vi lägga till en mening var.</p>
+
+  <div class="box">
+    <div class="notice">
+      <strong>Observera</strong>: Det här är en publik, öppen lista. Inlägg kan synas omedelbart. Undvik privata eller känsliga uppgifter.
+    </div>
+
+    <form id="submitForm">
+      <label for="sentence">Lägg till en mening</label>
+      <textarea id="sentence" placeholder="Skriv en rad..." required></textarea>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+        <button id="send">Skicka</button>
+        <div class="hint">Max 200 tecken. Anonyma bidrag.</div>
+      </div>
+    </form>
+    <div class="small">Vill du moderera? Lägg till en e-post i filen <code>MODERATION_CONTACT.txt</code>.</div>
+  </div>
+
+  <div class="box">
+    <div class="meta">Live-lista</div>
+    <div id="list" class="list"></div>
+  </div>
+
+  <script>
+  // --- Basic fallback localStorage behaviour ---
+  function renderList(arr){
+    const list = document.getElementById('list');
+    list.innerHTML = '';
+    arr.slice().reverse().forEach(it => {
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.textContent = it.text;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = it.time;
+      el.appendChild(meta);
+      list.appendChild(el);
+    });
+  }
+
+  function nowStr(){
+    return new Date().toLocaleString('sv-SE');
+  }
+
+  // Try to detect a Firebase config block provided in a global variable 'FIREBASE_CONFIG'.
+  // If present, use Firebase Realtime Database for live updates. Otherwise, fall back to localStorage.
+  (function(){
+    const form = document.getElementById('submitForm');
+    const textarea = document.getElementById('sentence');
+    const send = document.getElementById('send');
+
+    // FALLBACK data store using localStorage
+    function getLocal(){ try { return JSON.parse(localStorage.getItem('anti_sent')) || []; } catch(e){ return []; } }
+    function saveLocal(arr){ localStorage.setItem('anti_sent', JSON.stringify(arr)); }
+
+    // Initialize with local data
+    renderList(getLocal());
+
+    // If FIREBASE_CONFIG is set as a global object, try to connect to Firebase.
+    if (typeof FIREBASE_CONFIG !== 'undefined' && FIREBASE_CONFIG && typeof firebase === 'object') {
+      try {
+        // For Firebase v8 style usage. Assumes the hosting includes firebase-app and firebase-database.
+        if (!firebase.apps.length) {
+          firebase.initializeApp(FIREBASE_CONFIG);
+        }
+        const db = firebase.database();
+        const ref = db.ref('anti_partiet_sentences');
+
+        // On new child, render
+        ref.on('value', snapshot => {
+          const data = snapshot.val() || {};
+          const arr = Object.keys(data).map(k => data[k]);
+          renderList(arr);
+        });
+
+        form.addEventListener('submit', function(e){
+          e.preventDefault();
+          const text = textarea.value.trim().slice(0,200);
+          if (!text) return;
+          const entry = { text, time: nowStr() };
+          ref.push(entry);
+          textarea.value = '';
+        });
+        console.log('Firebase mode: connected');
+        return;
+      } catch(err){
+        console.warn('Firebase init failed', err);
+      }
+    }
+
+    // Local-only mode
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      const arr = getLocal();
+      const text = textarea.value.trim().slice(0,200);
+      if (!text) return;
+      arr.push({ text, time: nowStr() });
+      saveLocal(arr);
+      renderList(arr);
+      textarea.value = '';
+    });
+  })();
+  </script>
+
+  <!-- Firebase scripts (optional): include these in the hosted page if you plan to enable Firebase.
+       Example CDN for firebase v8 (unpkg or gstatic). If using modular v9, the script and init differs.
+       <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+       <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+       Then define a global FIREBASE_CONFIG object with your project's settings before this script tag:
+       <script>
+         var FIREBASE_CONFIG = {
+           apiKey: "API_KEY",
+           authDomain: "PROJECT_ID.firebaseapp.com",
+           databaseURL: "https://PROJECT_ID.firebaseio.com",
+           projectId: "PROJECT_ID",
+           storageBucket: "PROJECT_ID.appspot.com",
+           messagingSenderId: "SENDER_ID",
+           appId: "APP_ID"
+         };
+       </script>
+  -->
+</body>
+</html>
